@@ -1,9 +1,10 @@
 # furniture_sales
 ## SQL Project with ChatGPT
+
+## Project 1: Basic Sales Reporting
+ ### Objective: Create simple reports to track key performance metrics.
+#### Requirements:
 ```
-Project 1: Basic Sales Reporting
- Objective: Create simple reports to track key performance metrics.
- Requirements:
  1. Generate a report that shows total sales, total quantity, and total profit for the entire year.
  2. Create a summary table showing total sales by month.
  3. Provide a breakdown of sales by product category and sub-category.
