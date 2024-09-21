@@ -24,8 +24,8 @@
  purchases).
 ```
 ##  Project 3: Sales Performance Dashboard
- ### Objective: Build a SQL-driven sales dashboard that tracks key performance indicators (KPIs).
- #### Requirements:
+### Objective: Build a SQL-driven sales dashboard that tracks key performance indicators (KPIs).
+#### Requirements:
  ```
  1. Show total sales, profit, and quantity sold for the current month compared to the previous month.
  2. Display a breakdown of sales by region and market segment.
@@ -54,6 +54,7 @@
  4. Analyze any correlations between shipping times and total sales or customer satisfaction (if data
  is available).
  5. Recommend the best shipping modes for high-value customers based on historical data.
+
 Project 6: Customer Retention and Loyalty Analysis
  Objective: Analyze customer retention and create strategies for improving customer loyalty.
  Requirements:
@@ -67,6 +68,7 @@ Project 6: Customer Retention and Loyalty Analysis
  retention rates.
  5. Track customer purchasing patterns and identify potential churn risks based on inactivity or
  reduced purchasing frequency.
+
  Project 7: Marketing Campaign ROI Analysis
  Objective: Analyze the return on investment (ROI) for various marketing campaigns.
  Requirements:
@@ -77,6 +79,7 @@ Project 6: Customer Retention and Loyalty Analysis
  4. Analyze sales trends before and after each marketing campaign to evaluate its impact.
  5. Create a segmentation analysis to understand which customer groups responded best to each
  campaign.
+
  Project 8: Predictive Sales Analytics
 Objective: Use historical sales data to forecast future sales and trends.
  Requirements:
@@ -87,6 +90,7 @@ Objective: Use historical sales data to forecast future sales and trends.
  4. Create a forecasting report that breaks down future sales expectations by region and market
  segment.
  5. Suggest potential growth strategies for underperforming categories based on past data analysis.
+    
  Project 9: Profitability Analysis by Region
  Objective: Analyze profitability across different regions to optimize regional sales strategies.
  Requirements:
@@ -96,6 +100,7 @@ Objective: Use historical sales data to forecast future sales and trends.
  4. Analyze which product categories and sub-categories are most profitable in each region.
  5. Create a report that recommends regions for increased marketing investment based on
  profitability and sales growth potential.
+ 
  Project 10: Advanced Sales Growth Analytics
  Objective: Dive deeper into sales growth metrics and analyze factors influencing growth.
  Requirements:
