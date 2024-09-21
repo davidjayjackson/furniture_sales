@@ -10,9 +10,11 @@
  3. Provide a breakdown of sales by product category and sub-category.
  4. Identify the top 10 products by total sales.
  5. Write queries that summarize total sales, total profit, and total discount by shipping mode.
- Project 2: Customer Segmentation
- Objective: Identify customer segments to target for future marketing efforts.
- Requirements:
+```
+## Project 2: Customer Segmentation
+#### Objective: Identify customer segments to target for future marketing efforts.
+#### Requirements:
+```
  1. Create customer profiles by summarizing total sales and profit per customer.
  2. Group customers by market segment and provide the total number of customers, average sales
  per customer, and total profit per segment.
@@ -20,23 +22,28 @@
  4. Identify which products are most popular in each market segment.
  5. Analyze customer purchasing frequency (e.g., customers who have made more than 3
  purchases).
- Project 3: Sales Performance Dashboard
- Objective: Build a SQL-driven sales dashboard that tracks key performance indicators (KPIs).
- Requirements:
+```
+##  Project 3: Sales Performance Dashboard
+ ### Objective: Build a SQL-driven sales dashboard that tracks key performance indicators (KPIs).
+ #### Requirements:
+ ```
  1. Show total sales, profit, and quantity sold for the current month compared to the previous month.
-2. Display a breakdown of sales by region and market segment.
+ 2. Display a breakdown of sales by region and market segment.
  3. Create KPIs for average order value (AOV), customer lifetime value (CLV), and profit margin.
  4. Track sales growth or decline month-over-month and year-over-year.
  5. Provide a visual report of sales trends over time using date-based aggregations.
- Project 4: Inventory and Product Analytics
- Objective: Analyze product performance and inventory turnover to inform stock management.
- Requirements:
+```
+ ## Project 4: Inventory and Product Analytics
+### Objective: Analyze product performance and inventory turnover to inform stock management.
+#### Requirements:
+```
  1. Calculate the total number of unique products sold within the last year.
  2. Rank products by profit margin and identify the top 10 high-margin products.
  3. Calculate product sales velocity by determining how many units of each product are sold per
  month.
  4. Identify which products have declining sales or have not been sold in the last 6 months.
  5. Create a report to identify inventory turnover for each product category and sub-category.
+```
  Project 5: Shipping and Logistics Optimization
  Objective: Optimize shipping processes by analyzing delivery times and costs.
  Requirements:
