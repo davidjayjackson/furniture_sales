@@ -1,0 +1,147 @@
+---
+title: "Furniture Mart Presentation"
+format: pptx
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(scales)
+library(readxl)
+```
+```{r}
+sales <- read_xlsx("./sales.xlsx")
+sales$order_date <- as.Date(sales$order_date)
+sales$ship_date <- as.Date(sales$ship_date)
+
+```
+
+# Project 1: Basic Sales Reporting
+# Generate a report that shows total sales, total quantity, and total profit for the entire year.
+```{r}
+
+# Convert order_date to Date type and extract the year
+sales_data <- sales %>%
+  mutate(order_date = as.Date(order_date, format="%Y-%m-%d"),
+         year = year(order_date))
+
+# Summarize data: Total sales, total quantity, and total profit for each year
+annual_summary <- sales_data %>%
+  group_by(year) %>%
+  summarise(
+    total_sales = sum(as.numeric(total_sales), na.rm = TRUE),
+    total_quantity = sum(quantity, na.rm = TRUE),
+    total_profit = sum(profit, na.rm = TRUE)
+  )
+
+# Create plots for each metric using ggplot
+
+# 1. Total Sales by Year
+ggplot(annual_summary, aes(x = year, y = total_sales)) +
+  geom_col(fill = "steelblue") +
+  labs(title = "Total Sales by Year", x = "Year", y = "Total Sales")
+
+# 2. Total Quantity by Year
+ggplot(annual_summary, aes(x = year, y = total_quantity)) +
+  geom_col(fill = "orange") +
+  labs(title = "Total Quantity by Year", x = "Year", y = "Total Quantity")
+
+# 3. Total Profit by Year
+ggplot(annual_summary, aes(x = year, y = total_profit)) +
+  geom_col(fill = "green") +
+  labs(title = "Total Profit by Year", x = "Year", y = "Total Profit")
+
+```
+
+# Create a summary table showing total sales by month.
+
+```{r}
+# Summarize data: Total sales by month
+monthly_summary <- sales %>%
+  mutate(month_year = floor_date(order_date, "month")) %>%  # Create month-year column
+  group_by(month_year) %>%
+  summarise(total_sales = sum(as.numeric(total_sales), na.rm = TRUE)) %>%
+  arrange(month_year)
+
+# Plot the total sales by month, with fewer x-axis labels
+ggplot(monthly_summary, aes(x = month_year, y = total_sales)) +
+  geom_line(color = "blue", size = 1) +  # Line plot for trend
+  geom_point(color = "red", size = 2) +  # Add points to emphasize each month
+  labs(title = "Total Sales by Month", x = "Month", y = "Total Sales") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "3 months") +  # Break every 3 months
+  theme_minimal() +  # Use minimal theme for clean visualization
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_smooth(aes(x = month_year, y = total_sales))
+```
+
+#  Provide a breakdown of sales by product and sub-category.
+
+```{r}
+# Summarize data: Total sales by sub-category
+subcategory_summary <- sales %>%
+  group_by(sub_category) %>%
+  summarise(total_sales = sum(as.numeric(total_sales), na.rm = TRUE)) %>%
+  arrange(desc(total_sales))
+
+# Plot the total sales by sub-category
+ggplot(subcategory_summary, aes(x = reorder(sub_category, -total_sales), y = total_sales, fill = sub_category)) +
+  geom_col(show.legend = FALSE) +  # Hide legend since we're showing categories directly
+  labs(title = "Total Sales by Sub-Category", x = "Sub-Category", y = "Total Sales") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(labels=comma)
+```
+
+```{r}
+# Summarize data: Total sales by product
+product_summary <- sales_data %>%
+  group_by(product_name) %>%
+  summarise(total_sales = sum(as.numeric(total_sales), na.rm = TRUE)) %>%
+  arrange(desc(total_sales)) %>%
+  slice_head(n = 10)  # Select top 5 products by total sales
+
+# Plot the total sales of the top 5 products with wrapped product names
+ggplot(product_summary, aes(x = reorder(str_wrap(product_name, width = 40), total_sales), y = total_sales, fill = product_name)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +  # Flip for better readability with long product names
+  labs(title = "Top 5 Products by Total Sales", x = "Product", y = "Total Sales") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 8))
+```
+
+#  Write queries that summarize total sales, total profit, and total discount by shipping mode.
+
+```{r}
+# Summarize data: Total sales, total profit, and total discount by shipping mode
+shipping_mode_summary <- sales %>%
+  group_by(ship_mode) %>%
+  summarise(
+    total_sales = sum(as.numeric(total_sales), na.rm = TRUE),
+    total_profit = sum(as.numeric(profit), na.rm = TRUE),
+    total_discount = sum(as.numeric(discount), na.rm = TRUE)
+  )
+
+
+# Plot 1: Total Sales by Shipping Mode
+ggplot(shipping_mode_summary, aes(x = reorder(ship_mode, total_sales), y = total_sales, fill = ship_mode)) +
+  geom_col(show.legend = FALSE, width = 0.6) +
+  labs(title = "Total Sales by Shipping Mode", x = "Shipping Mode", y = "Total Sales") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Plot 2: Total Profit by Shipping Mode
+ggplot(shipping_mode_summary, aes(x = reorder(ship_mode, total_profit), y = total_profit, fill = ship_mode)) +
+  geom_col(show.legend = FALSE, width = 0.6) +
+  labs(title = "Total Profit by Shipping Mode", x = "Shipping Mode", y = "Total Profit") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Plot 3: Total Discount by Shipping Mode
+ggplot(shipping_mode_summary, aes(x = reorder(ship_mode, total_discount), y = total_discount, fill = ship_mode)) +
+  geom_col(show.legend = FALSE, width = 0.6) +
+  labs(title = "Total Discount by Shipping Mode", x = "Shipping Mode", y = "Total Discount") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
