@@ -1,0 +1,211 @@
+---
+title: "Project 2: Customer Segmentation"
+format: pptx
+editor: visual
+---
+
+
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(scales)
+library(readxl)
+library(gt)
+```
+
+```{r}
+sales <- read_xlsx("./sales.xlsx")
+sales$order_date <- as.Date(sales$order_date)
+sales$ship_date <- as.Date(sales$ship_date)
+# Convert order_date to Date type and extract the year
+sales_data <- sales %>%
+  mutate(order_date = as.Date(order_date, format="%Y-%m-%d"),
+         year = year(order_date))
+```
+
+# Customer Sales and Profit Profiles
+
+```{r}
+# Load necessary libraries
+library(tidyverse)
+
+# Summarize total sales and profit per customer
+customer_summary <- sales_data %>%
+  group_by(customer_name) %>%
+  summarize(total_sales = sum(as.numeric(total_sales)),
+            total_profit = sum(as.numeric(profit))) %>%
+  arrange(desc(total_sales)) %>%
+  slice(1:10)  # Select the top 10 customers based on total sales
+
+# Reshape data for plotting with a proper legend
+customer_summary_long <- customer_summary %>%
+  pivot_longer(cols = c(total_sales, total_profit), names_to = "Metric", values_to = "Amount")
+
+# Create the plot for the top 10 customers
+ggplot(customer_summary_long, aes(y = reorder(customer_name, Amount), x = Amount, fill = Metric)) +
+  geom_bar(stat = "identity", position = "dodge", alpha = 0.7) +
+  labs(title = "Top 10 Customers by Total Sales and Profit",
+       x = "Amount in USD", y = "Customer Name", fill = "Metric") +
+  scale_fill_manual(values = c("total_sales" = "blue", "total_profit" = "red")) +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 8)) +
+  scale_x_continuous(labels = scales::dollar_format())
+
+```
+
+# Group customers by market segment and provide the total number of customers, average sales
+# per customer, and total profit per segment.
+
+```{r}
+
+# Assuming your data is stored in a dataframe called 'sales_data'
+# Summarize number of customers, average sales per customer, and total profit per market segment
+segment_summary <- sales_data %>%
+  group_by(market_segment) %>%
+  summarize(
+    total_customers = n_distinct(customer_name),
+    avg_sales_per_customer = mean(as.numeric(total_sales)),
+    total_profit = sum(as.numeric(profit))
+  )
+
+# Create bar plot for total number of customers by market segment
+ggplot(segment_summary, aes(x = market_segment, y = total_customers, fill = market_segment)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Number of Customers by Market Segment",
+       x = "Market Segment", y = "Total Customers") +
+  theme_minimal()
+
+# Create bar plot for average sales per customer by market segment
+ggplot(segment_summary, aes(x = market_segment, y = avg_sales_per_customer, fill = market_segment)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Average Sales per Customer by Market Segment",
+       x = "Market Segment", y = "Average Sales (USD)") +
+  theme_minimal()
+
+# Create bar plot for total profit by market segment
+ggplot(segment_summary, aes(x = market_segment, y = total_profit, fill = market_segment)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Profit by Market Segment",
+       x = "Market Segment", y = "Total Profit (USD)") +
+  theme_minimal()
+
+```
+
+#  Identify the top 10 customers by total sales and their respective regions.
+
+
+
+```{r}
+# Summarize total sales per customer and region
+top_customers_by_region <- sales_data %>%
+  group_by(customer_name, region) %>%
+  summarize(total_sales = sum(as.numeric(total_sales))) %>%
+  arrange(region, desc(total_sales)) %>%
+  group_by(region) %>%
+  slice(1:10)  # Select the top 10 customers for each region
+
+# Create a separate plot for each region
+regions <- unique(top_customers_by_region$region)
+
+# Loop through each region and create the plots
+for(region in regions) {
+  region_data <- top_customers_by_region %>%
+    filter(region == !!region)
+  
+  # Plot for each region
+  p <- ggplot(region_data, aes(x = reorder(customer_name, total_sales), y = total_sales, fill = region)) +
+    geom_bar(stat = "identity") +
+    labs(title = paste("Top 10 Customers by Total Sales in", region, "Region"),
+         x = "Customer Name", y = "Total Sales (USD)", fill = "Region") +
+    theme_minimal() +
+    coord_flip() +  # Flip the coordinates for readability
+    scale_y_continuous(labels = scales::dollar_format())
+  
+  print(p)
+}
+
+
+```
+
+#  Identify which products are most popular in each market segment.
+
+```{r}
+
+# Load necessary libraries
+library(tidyverse)
+
+# Assuming 'most_popular_products' contains the summarized data
+most_popular_products <- sales_data %>%
+  group_by(market_segment, product_name) %>%
+  summarize(total_quantity = sum(as.numeric(quantity))) %>%
+  arrange(market_segment, desc(total_quantity)) %>%
+  group_by(market_segment) %>%
+  slice(1)  # Select the most popular product in each segment
+
+# Create a bar plot for the most popular products by market segment
+ggplot(most_popular_products, aes(x = reorder(product_name, total_quantity), y = total_quantity, fill = market_segment)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Most Popular Products by Market Segment",
+       x = "Product Name", y = "Total Quantity Sold", fill = "Market Segment") +
+  theme_minimal() +
+  coord_flip() +  # Flip the coordinates for readability
+  scale_y_continuous(labels = scales::comma_format())
+```
+```{r}
+# Load necessary libraries
+library(tidyverse)
+
+# Summarize product popularity by market segment (using the quantity column to measure popularity)
+top_products_by_segment <- sales_data %>%
+  group_by(market_segment, product_name) %>%
+  summarize(total_quantity = sum(as.numeric(quantity))) %>%
+  arrange(market_segment, desc(total_quantity)) %>%
+  group_by(market_segment) %>%
+  slice(1:3)  # Select the top 3 products for each market segment
+
+# Get the unique market segments
+segments <- unique(top_products_by_segment$market_segment)
+
+# Create a separate plot for each market segment
+for (segment in segments) {
+  segment_data <- top_products_by_segment %>%
+    filter(market_segment == !!segment)
+  
+  # Plot for each segment
+  p <- ggplot(segment_data, aes(x = reorder(product_name, total_quantity), y = total_quantity, fill = product_name)) +
+    geom_bar(stat = "identity") +
+    labs(title = paste("Top 3 Products in", segment, "Segment"),
+         x = "Product Name", y = "Total Quantity Sold") +
+    theme_minimal() +
+    coord_flip() +  # Flip the coordinates for readability
+    scale_y_continuous(labels = scales::comma_format()) +
+    theme(legend.position = "none")  # Turn off the legend
+  
+  print(p)
+}
+
+```
+
+# Analyze customer purchasing frequency (e.g., customers who have made more than 3
+ purchases).
+ 
+```{r}
+# Load necessary libraries
+library(tidyverse)
+
+# Assuming 'frequent_customers' contains the summarized data
+frequent_customers <- sales_data %>%
+  group_by(customer_name) %>%
+  summarize(purchase_count = n_distinct(order_id)) %>%
+  filter(purchase_count > 5)  # Filter customers with more than 3 purchases
+
+# Create a bar plot for customers with more than 3 purchases
+ggplot(frequent_customers, aes(x = reorder(customer_name, purchase_count), y = purchase_count)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(title = "Customer Purchasing Frequency (More Than 5 Purchases)",
+       x = "Customer Name", y = "Number of Purchases") +
+  theme_minimal() +
+  coord_flip()  # Flip the coordinates for readability
+```
