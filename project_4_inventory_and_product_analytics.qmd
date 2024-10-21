@@ -1,0 +1,147 @@
+---
+title: "Project 4: Inventory and Product Analytics"
+subtitle: "Objective: Analyze product performance and inventory turnover to inform stock management"
+format: revealjs
+editor: visual
+---
+
+```{r setup}
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(scales)
+library(readxl)
+library(gt)
+
+```
+
+```{r}
+rm(list=ls())
+sales_data <- read_xlsx("./sales.xlsx")
+sales_data$order_date <- as.Date(sales_data$order_date)
+sales_data$ship_date <- as.Date(sales_data$ship_date)
+
+```
+
+# 1:  Calculate the total number of unique products sold within the last year.
+
+```{r}
+# Get the latest date in the data
+latest_date <- max(sales_data$order_date, na.rm = TRUE)
+
+# Calculate the date exactly one year ago
+one_year_ago <- latest_date - years(1)
+
+# Filter the sales data to include only the last year
+last_year_sales <- sales_data %>%
+  filter(order_date >= one_year_ago)
+
+# Calculate the number of unique products sold in the last year
+unique_products_sold <- last_year_sales %>%
+  summarise(total_unique_products = n_distinct(product_id))
+
+# Print the result
+print(unique_products_sold)
+
+# Plot 1: Total Unique Products Sold Over Time (by month)
+sales_by_month <- last_year_sales %>%
+  group_by(month = floor_date(order_date, "month")) %>%
+  summarise(unique_products = n_distinct(product_id))
+
+ggplot(sales_by_month, aes(x = month, y = unique_products)) +
+  geom_line(color = "blue", size = 1) +
+  labs(title = "Unique Products Sold by Month in the Last Year",
+       x = "Month",
+       y = "Number of Unique Products") +
+  theme_minimal()
+
+
+```
+```{r}
+# Plot 2: Sorted Bar Chart for Product Sales Frequency with Limited X-axis Labels
+product_sales <- last_year_sales %>%
+  group_by(product_id) %>%
+  summarise(sales_count = n()) %>%
+  arrange(desc(sales_count))
+
+ggplot(product_sales, aes(x = reorder(product_id, -sales_count), y = sales_count)) +
+  geom_bar(stat = "identity", fill = "darkgreen") +
+  labs(title = "Sorted Distribution of Products Sold in the Last Year",
+       x = "Product ID (Sorted by Sales Count)",
+       y = "Count of Sales") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 6)) +  # Decrease label size for readability
+  scale_x_discrete(breaks = product_sales$product_id[seq(1, nrow(product_sales), by = 10)])  # Show every 10th label
+
+```
+
+# 2: Rank products by profit margin and identify the top 10 high-margin products.
+
+```{r}
+
+# Corrected code
+sales_data |> 
+  group_by(product_name) |> 
+  summarise(total_margin = sum(profit_margin, na.rm = TRUE)) |>  # Summing profit_margin with NA handling
+  arrange(desc(total_margin)) |>  # Sorting in descending order
+  slice_max(total_margin, n = 10) |>  # Selecting top 10 based on total_margin
+  ggplot(aes(x = reorder(str_wrap(product_name, width = 30), total_margin), y = total_margin)) +  # Wrapping product_name and reordering
+  geom_col(fill = "steelblue") +  # Creating the bar plot
+  coord_flip() +  # Flipping the coordinates for horizontal bars
+  labs(title = "Top 10 Products by Total Profit Margin", x = "Product Name", y = "Total Profit Margin") +
+  theme_minimal()
+
+
+
+```
+
+# 3: Calculate product sales velocity by determining how many units of each product are sold/ month
+
+```{r}
+
+
+# Extract year and month from the order date
+sales_data <- sales_data %>%
+  mutate(year_month = floor_date(order_date, unit = "month"))
+
+# Group by product and month, then calculate total units sold per month for each product
+sales_per_month <- sales_data %>%
+  group_by(product_id, product_name, year_month) %>%
+  summarise(total_units_sold = sum(quantity, na.rm = TRUE)) %>%
+  ungroup()
+
+# Print the total units sold per month for each product
+print(sales_per_month)
+
+# Optionally, plot total units sold for the top 10 products for a specific month
+# (Let's assume we are looking at the most recent month)
+most_recent_month <- max(sales_per_month$year_month)
+
+top_10_sales_per_month <- sales_per_month %>%
+  filter(year_month == most_recent_month) %>%
+  slice_max(total_units_sold, n = 10)
+
+ggplot(top_10_sales_per_month, aes(x = reorder(str_wrap(product_name, 40), total_units_sold), y = total_units_sold)) +
+  geom_col(fill = "darkgreen") +
+  coord_flip() +
+  labs(title = paste("Top 10 Products Sold in", format(most_recent_month, "%B %Y")),
+       x = "Product Name",
+       y = "Total Units Sold") +
+  theme_minimal() +
+   theme(axis.text.y = element_text(size = 6)) 
+
+
+```
+
+# 4: Identify which products have declining sales or have not been sold in the last 6 months.
+
+```{r}
+
+```
+
+# 5:  Create a report to identify inventory turnover for each product category and sub-category.
+
+
+```{r}
+
+```
