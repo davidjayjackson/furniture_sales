@@ -1,7 +1,7 @@
 ---
 title: "Project 4: Inventory and Product Analytics"
 subtitle: "Objective: Analyze product performance and inventory turnover to inform stock management"
-format: revealjs
+format: pptx
 editor: visual
 ---
 
@@ -12,7 +12,7 @@ library(forecast)
 library(scales)
 library(readxl)
 library(gt)
-
+knitr::opts_chunk$set(echo = TRUE,message = FALSE, warning = FALSE)
 ```
 
 ```{r}
@@ -79,17 +79,36 @@ ggplot(product_sales, aes(x = reorder(product_id, -sales_count), y = sales_count
 
 ```{r}
 
-# Corrected code
-sales_data |> 
-  group_by(product_name) |> 
-  summarise(total_margin = sum(profit_margin, na.rm = TRUE)) |>  # Summing profit_margin with NA handling
-  arrange(desc(total_margin)) |>  # Sorting in descending order
-  slice_max(total_margin, n = 10) |>  # Selecting top 10 based on total_margin
-  ggplot(aes(x = reorder(str_wrap(product_name, width = 30), total_margin), y = total_margin)) +  # Wrapping product_name and reordering
-  geom_col(fill = "steelblue") +  # Creating the bar plot
-  coord_flip() +  # Flipping the coordinates for horizontal bars
-  labs(title = "Top 10 Products by Total Profit Margin", x = "Product Name", y = "Total Profit Margin") +
+#
+
+# Step 2: Calculate the profit margin for each product
+sales_data <- sales_data %>%
+  mutate(profit_margin = (profit / total_sales) * 100)  # Profit margin as a percentage
+
+# Step 3: Rank products by profit margin
+product_profit_margin <- sales_data %>%
+  group_by(product_name) %>%
+  summarise(
+    total_sales = sum(total_sales, na.rm = TRUE),
+    total_profit = sum(profit, na.rm = TRUE),
+    average_profit_margin = mean(profit_margin, na.rm = TRUE)
+  ) %>%
+  arrange(desc(average_profit_margin))  # Rank by profit margin
+
+# Step 4: Select the top 10 high-margin products
+top_10_high_margin_products <- product_profit_margin %>%
+  top_n(10, average_profit_margin)
+
+# Step 5: Display the top 10 products in a table
+print(top_10_high_margin_products)
+
+# Optional: Plot the top 10 high-margin products
+ggplot(top_10_high_margin_products, aes(x = reorder(product_name, average_profit_margin), y = average_profit_margin)) +
+  geom_bar(stat = "identity", fill = "green") +
+  coord_flip() +
+  labs(title = "Top 10 High-Margin Products", x = "Product", y = "Average Profit Margin (%)") +
   theme_minimal()
+
 
 
 
@@ -136,12 +155,63 @@ ggplot(top_10_sales_per_month, aes(x = reorder(str_wrap(product_name, 40), total
 # 4: Identify which products have declining sales or have not been sold in the last 6 months.
 
 ```{r}
+# Set the reference date as December 30, 2017
+reference_date <- as.Date("2017-12-30")
 
+# Step 2: Identify the last sale date for each product
+unsold_products <- sales_data %>%
+  group_by(product_name) %>%
+  summarise(last_sale_date = max(order_date)) %>%
+  mutate(days_since_last_sale = as.numeric(reference_date - last_sale_date)) %>%
+  arrange(desc(days_since_last_sale))  # Sort by longest duration since last order
+
+# Step 3: Filter the top 10 products with the longest duration since last order
+top_10_unsold_products <- unsold_products %>%
+  top_n(10, days_since_last_sale)
+
+# Step 4: Plot the top 10 unsold products
+top_10_unsold_products %>%
+  ggplot(aes(x = reorder(product_name, days_since_last_sale), y = days_since_last_sale)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Top 10 Products with Longest Time Since Last Order", 
+       x = "Product", y = "Days Since Last Sale") +
+  theme_minimal()
 ```
+
 
 # 5:  Create a report to identify inventory turnover for each product category and sub-category.
 
 
 ```{r}
+# Load necessary libraries
+library(tidyverse)
+library(lubridate)
+
+
+
+# Step 2: Group by category and sub_category to calculate total sales and quantity
+category_turnover <- sales_data %>%
+  group_by(category, sub_category) %>%
+  summarise(
+    total_sales = sum(total_sales, na.rm = TRUE),
+    total_quantity = sum(quantity, na.rm = TRUE),
+    turnover = total_sales / total_quantity  # Approximate turnover metric
+  ) %>%
+  arrange(desc(turnover))
+
+# Step 3: Create a report in tabular form
+category_turnover_report <- category_turnover %>%
+  mutate(turnover = round(turnover, 2))  # Round turnover values
+
+# Step 4: Plot inventory turnover for each category and sub-category
+ggplot(category_turnover_report, aes(x = reorder(sub_category, turnover), y = turnover, fill = category)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Inventory Turnover by Category and Sub-Category", x = "Sub-Category", y = "Turnover") +
+  theme_minimal()
+
+# Display the report as a table
+print(category_turnover_report)
 
 ```
