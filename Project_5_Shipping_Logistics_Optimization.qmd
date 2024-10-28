@@ -1,0 +1,199 @@
+---
+title: "Project 5: Shipping and Logistics Optimization"
+subtitle: "Objective: Optimize shipping processes by analyzing delivery times and costs."
+format: pptx
+editor: visual
+---
+
+```{r setup}
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(scales)
+library(readxl)
+library(gt)
+library(duckdb)
+library(DBI)
+knitr::opts_chunk$set(echo = TRUE,message = FALSE, warning = FALSE)
+```
+```{r}
+# rm(list=ls())
+# sales_data <- read_xlsx("./sales.xlsx")
+# sales_data$order_date <- as.Date(sales_data$order_date)
+# sales_data$ship_date <- as.Date(sales_data$ship_date)
+
+```
+```{r}
+# Connect to DuckDB and explicitly create table with VARCHAR for mprime column
+# con <- dbConnect(duckdb(), "./furniture_mart.duckdb")
+# dbWriteTable(con,"sales",sales_data)
+# sales <- dbGetQuery(con,"SELECT * FROM sales;")
+```
+
+# 1. Calculate the average shipping time for each shipping mode by comparing order date and ship  date.
+
+```{r}
+
+# Load the dataset
+# Replace the path with the actual path if loading from a file
+# sales <- read_excel("path/to/sales.xlsx")
+
+# Step 1: Convert order_date and ship_date to Date format, calculate shipping time
+sales <- sales %>%
+  mutate(order_date = as_date(order_date, format = "%Y-%m-%d"),
+         ship_date = as_date(ship_date, format = "%Y-%m-%d"),
+         shipping_time = as.numeric(difftime(ship_date, order_date, units = "days")))
+
+# Step 2: Calculate the average shipping time per shipping mode
+average_shipping_time <- sales %>%
+  group_by(ship_mode) %>%
+  summarize(avg_shipping_time = mean(shipping_time, na.rm = TRUE))
+
+# Step 3: Plot the average shipping time for each shipping mode
+ggplot(average_shipping_time, aes(x = reorder(ship_mode, avg_shipping_time), y = avg_shipping_time)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Average Shipping Time by Shipping Mode",
+       x = "Shipping Mode",
+       y = "Average Shipping Time (days)") +
+  theme_minimal()
+
+```
+
+# 2. Identify the regions with the longest average shipping times.
+
+```{r}
+# Load the dataset
+# Replace the path with the actual path if loading from a file
+# sales <- read_excel("path/to/sales.xlsx")
+
+# Step 1: Ensure order_date and ship_date are in Date format and calculate shipping time
+sales <- sales %>%
+  mutate(order_date = as_date(order_date, format = "%Y-%m-%d"),
+         ship_date = as_date(ship_date, format = "%Y-%m-%d"),
+         shipping_time = as.numeric(difftime(ship_date, order_date, units = "days")))
+
+# Step 2: Calculate the average shipping time per region
+average_shipping_time_region <- sales %>%
+  group_by(region) %>%
+  summarize(avg_shipping_time = mean(shipping_time, na.rm = TRUE)) %>%
+  arrange(desc(avg_shipping_time))
+
+# Step 3: Plot the average shipping time for each region
+ggplot(average_shipping_time_region, aes(x = reorder(region, avg_shipping_time), y = avg_shipping_time)) +
+  geom_bar(stat = "identity", fill = "coral") +
+  coord_flip() +
+  labs(title = "Average Shipping Time by Region",
+       x = "Region",
+       y = "Average Shipping Time (days)") +
+  theme_minimal()
+
+```
+
+# 3. Provide insights into which shipping mode yields the highest profit margin.
+
+
+```{r}
+# Load necessary libraries
+library(tidyverse)
+
+# Load the dataset
+# Replace the path with the actual path if loading from a file
+# sales <- read_excel("path/to/sales.xlsx")
+
+# Step 1: Calculate the profit margin for each order
+sales <- sales %>%
+  mutate(profit_margin = (profit / as.numeric(total_sales)) * 100)
+
+# Step 2: Calculate the average profit margin per shipping mode
+average_profit_margin <- sales %>%
+  group_by(ship_mode) %>%
+  summarize(avg_profit_margin = mean(profit_margin, na.rm = TRUE)) %>%
+  arrange(desc(avg_profit_margin))
+
+# Step 3: Plot the average profit margin for each shipping mode with labels
+ggplot(average_profit_margin, aes(x = reorder(ship_mode, avg_profit_margin), y = avg_profit_margin)) +
+  geom_bar(stat = "identity", fill = "lightgreen") +
+  geom_text(aes(label = paste0(round(avg_profit_margin, 1), "%")), 
+            vjust = -0.3, size = 5) +
+  labs(title = "Average Profit Margin by Shipping Mode",
+       x = "Shipping Mode",
+       y = "Average Profit Margin (%)") +
+  theme_minimal()
+
+```
+
+# 4. Analyze any correlations between shipping times and total sales or customer satisfaction (if data  is available).
+
+```{r}
+# Load necessary libraries
+library(tidyverse)
+
+# Load the dataset
+# Replace the path with the actual path if loading from a file
+# sales <- read_excel("path/to/sales.xlsx")
+
+# Step 1: Ensure shipping time is calculated
+sales <- sales %>%
+  mutate(order_date = as_date(order_date, format = "%Y-%m-%d"),
+         ship_date = as_date(ship_date, format = "%Y-%m-%d"),
+         shipping_time = as.numeric(difftime(ship_date, order_date, units = "days")))
+
+# Step 2: Calculate correlation between shipping time and total sales
+correlation_sales <- cor(sales$shipping_time, as.numeric(sales$total_sales), use = "complete.obs")
+
+# Step 3: Scatter plot for shipping time vs. total sales
+ggplot(sales, aes(x = shipping_time, y = as.numeric(total_sales))) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(title = paste("Correlation between Shipping Time and Total Sales: ", round(correlation_sales, 2)),
+       x = "Shipping Time (days)",
+       y = "Total Sales") +
+  theme_minimal()
+```
+
+# 5. Recommend the best shipping modes for high-value customers based on historical data
+
+```{r}
+# Load necessary libraries
+library(tidyverse)
+
+# Load the dataset
+# Replace the path with the actual path if loading from a file
+# sales <- read_excel("path/to/sales.xlsx")
+
+# Step 1: Define high-value customers (e.g., customers with total sales in the top 20%)
+high_value_threshold <- quantile(as.numeric(sales$total_sales), 0.8, na.rm = TRUE)
+high_value_sales <- sales %>%
+  filter(as.numeric(total_sales) >= high_value_threshold)
+
+# Step 2: Analyze average profit margin and shipping time by shipping mode for high-value customers
+high_value_shipping_modes <- high_value_sales %>%
+  mutate(profit_margin = (profit / as.numeric(total_sales)) * 100,
+         shipping_time = as.numeric(difftime(ship_date, order_date, units = "days"))) %>%
+  group_by(ship_mode) %>%
+  summarize(avg_shipping_time = mean(shipping_time, na.rm = TRUE),
+            avg_profit_margin = mean(profit_margin, na.rm = TRUE),
+            total_sales = sum(as.numeric(total_sales), na.rm = TRUE)) %>%
+  arrange(desc(total_sales))
+
+# Step 3: Visualize the performance of each shipping mode for high-value customers
+# Plot 1: Average Profit Margin by Shipping Mode
+ggplot(high_value_shipping_modes, aes(x = reorder(ship_mode, avg_profit_margin), y = avg_profit_margin)) +
+  geom_bar(stat = "identity", fill = "lightblue") +
+  geom_text(aes(label = paste0(round(avg_profit_margin, 1), "%")), 
+            vjust = -0.3, size = 5) +
+  labs(title = "Average Profit Margin by Shipping Mode for High-Value Customers",
+       x = "Shipping Mode",
+       y = "Average Profit Margin (%)") +
+  theme_minimal()
+
+# Plot 2: Average Shipping Time by Shipping Mode
+ggplot(high_value_shipping_modes, aes(x = reorder(ship_mode, avg_shipping_time), y = avg_shipping_time)) +
+  geom_bar(stat = "identity", fill = "coral") +
+  geom_text(aes(label = round(avg_shipping_time, 1)), 
+            vjust = -0.3, size = 5) +
+  labs(title = "Average Shipping Time by Shipping Mode for High-Value Customers",
+       x = "Shipping Mode",
+       y = "Average Shipping Time (days)") +
+  theme_minimal()
+```
