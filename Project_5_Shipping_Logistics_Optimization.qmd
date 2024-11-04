@@ -25,10 +25,19 @@ knitr::opts_chunk$set(echo = TRUE,message = FALSE, warning = FALSE)
 ```
 ```{r}
 # Connect to DuckDB and explicitly create table with VARCHAR for mprime column
-# con <- dbConnect(duckdb(), "./furniture_mart.duckdb")
+con <- dbConnect(duckdb(), "./furniture_mart.duckdb")
 # dbWriteTable(con,"sales",sales_data)
-# sales <- dbGetQuery(con,"SELECT * FROM sales;")
+sales <- dbGetQuery(con,"SELECT * FROM sales;")
 ```
+
+# 0 Table of Contents
+
+* 1. Calculate the average shipping time for each shipping mode by comparing order date and ship  date
+* 2. Identify the regions with the longest average shipping times
+* 3. Provide insights into which shipping mode yields the highest profit margin.
+* 4. Analyze any correlations between shipping times and total sales
+* 5. Recommend the best shipping modes for high-value customers based on historical data
+
 
 # 1. Calculate the average shipping time for each shipping mode by comparing order date and ship  date.
 

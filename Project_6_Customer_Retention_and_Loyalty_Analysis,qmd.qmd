@@ -1,0 +1,385 @@
+---
+title: "Furniture Mart: Customer Retention and Loyalty Analysis"
+subtitle: " Objective: Analyze customer retention and create strategies for improving customer loyalty."
+format: pptx
+editor: visual
+---
+```{r setup}
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(scales) # format x an y labels in ggploty
+library(gt) # table formatter
+library(duckdb)
+library(DBI)
+knitr::opts_chunk$set(echo = TRUE,message = FALSE, warning = FALSE)
+```
+
+```{r}
+rm(list=ls())
+```
+```{r}
+# Connect to DuckDB and explicitly create table with VARCHAR for mprime column
+# con <- dbConnect(duckdb(), "./furniture_mart.duckdb")
+# # dbWriteTable(con,"sales",sales_data)
+# sales <- dbGetQuery(con,"SELECT * FROM sales;")
+```
+```{r}
+# Check if 'con' exists and is valid
+if (exists("con") && dbIsValid(con)) {
+  # Connection exists and is valid; go straight to querying
+  
+  sales <- dbGetQuery(con, "SELECT * FROM sales;")
+  dbDisconnect(con)
+} else {
+  # Connection does not exist or is invalid; establish connection first
+  con <- dbConnect(duckdb(), "./furniture_mart.duckdb")
+  sales <- dbGetQuery(con, "SELECT * FROM sales;")
+  dbDisconnect(con)
+}
+```
+```{r}
+# Question 1:
+# Step 1: Extract relevant columns and add 'year' from 'order_date'
+sales_data <- sales %>%
+  select(customer_id, order_date) %>%
+  mutate(year = year(ymd(order_date)))
+
+# Step 2: Identify repeat customers in consecutive years
+# Group by customer_id and year, and count unique years for each customer
+customer_years <- sales_data %>%
+  group_by(customer_id, year) %>%
+  summarize(purchases = n_distinct(order_date), .groups = 'drop')
+
+# Calculate retention by checking if customer appears in consecutive years
+customer_retention <- customer_years %>%
+  arrange(customer_id, year) %>%
+  group_by(customer_id) %>%
+  mutate(repeat_purchase = year - lag(year) == 1) %>%
+  ungroup()
+
+# Step 3: Calculate retention rate by year
+retention_rate <- customer_retention %>%
+  filter(repeat_purchase == TRUE) %>%
+  count(year) %>%
+  rename(retained_customers = n) %>%
+  right_join(customer_years %>% count(year), by = "year") %>%
+  mutate(retention_rate = retained_customers / n * 100) %>%
+  replace_na(list(retention_rate = 0))
+
+```
+
+```{r}
+# A1: Top 5 customer with the longest retention
+
+# Step 1: Extract relevant columns and add 'year' from 'order_date'
+sales_data <- sales_data %>%
+  select(customer_id, order_date) %>%
+  mutate(year = year(ymd(order_date)))
+
+# Step 2: Identify consecutive purchase years and calculate retention
+# First, group by customer and year, then calculate retention and consecutive years
+customer_years <- sales_data %>%
+  group_by(customer_id, year) %>%
+  summarize(purchases = n_distinct(order_date), .groups = 'drop') %>%
+  arrange(customer_id, year) %>%
+  group_by(customer_id) %>%
+  mutate(consecutive_year = cumsum(c(1, diff(year) != 1))) %>%
+  ungroup()
+
+# Retention Rate Calculation (for the first plot)
+retention_rate <- customer_years %>%
+  group_by(customer_id) %>%
+  mutate(repeat_purchase = year - lag(year) == 1) %>%
+  ungroup() %>%
+  filter(repeat_purchase == TRUE) %>%
+  count(year) %>%
+  rename(retained_customers = n) %>%
+  right_join(customer_years %>% count(year), by = "year") %>%
+  mutate(retention_rate = retained_customers / n * 100) %>%
+  replace_na(list(retention_rate = 0))
+
+# Longest Retention Streak Calculation for Top 5 Customers
+longest_retention <- customer_years %>%
+  group_by(customer_id, consecutive_year) %>%
+  summarize(streak = n(), .groups = 'drop') %>%
+  arrange(desc(streak)) %>%
+  group_by(customer_id) %>%
+  slice_max(streak, n = 1) %>%
+  ungroup() %>%
+  arrange(desc(streak)) %>%
+  slice_head(n = 5)
+
+# Filter for top 5 customers with longest retention
+top_customers <- customer_years %>%
+  filter(customer_id %in% longest_retention$customer_id)
+
+```
+
+```{r}
+# Question 3:
+# Step 1: Extract relevant columns and add 'year' from 'order_date'
+sales_data <- sales_data %>%
+  select(customer_id, order_date) %>%
+  mutate(order_date = ymd(order_date))
+
+# Step 2: Determine the latest date in the order_date column
+latest_order_date <- max(sales_data$order_date)
+
+# Step 3: Identify the last purchase date for each customer
+last_purchase <- sales_data %>%
+  group_by(customer_id) %>%
+  summarize(last_purchase_date = max(order_date), .groups = 'drop')
+
+# Step 4: Calculate inactivity by comparing last purchase to the latest date in data
+reengagement_list <- last_purchase %>%
+  mutate(months_since_last_purchase = interval(last_purchase_date, latest_order_date) / months(1)) %>%
+  filter(months_since_last_purchase > 40) %>%
+  select(customer_id, last_purchase_date, months_since_last_purchase)
+
+
+```
+
+
+
+# 0 Table of Contents
+
+* 1. Calculate the retention rate by analyzing customers who made repeat purchases in consecutive years.
+* 2. Identify customers who have not made a purchase in over 12 months and create a list for a  re-engagement marketing campaign.
+* 3. Create a customer lifetime value (CLV) metric that calculates the total profit from each customer
+ over time.
+* 4. Determine which customer segments (market segments, regions) have the highest and lowest
+ retention rates.
+* 5. Track customer purchasing patterns and identify potential churn risks based on inactivity or
+ reduced purchasing frequency
+
+
+# 1. Calculate the retention rate by analyzing customers who made repeat purchases in consecutive  years.
+```{r}
+ # Step 4: Plotting Retention Rate Over Time
+ggplot(retention_rate, aes(x = year, y = retention_rate)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Customer Retention Rate by Year",
+       x = "Year",
+       y = "Retention Rate (%)") +
+  theme_minimal()
+ 
+```
+
+```{r}
+# Plot 2: Top 5 Customers with Longest Retention
+ggplot(top_customers, aes(x = year, y = customer_id, group = customer_id, color = as.factor(customer_id))) +
+  geom_line(size = 1.2) +
+  geom_point(size = 3) +
+  labs(title = "Top 5 Customers with Longest Retention",
+       x = "Year",
+       y = "Customer ID",
+       color = "Customer ID") +
+  theme_minimal()
+```
+ 
+# 2. Identify customers who have not made a purchase in over 12 months and create a list for a  re-engagement marketing campaign.
+
+```{r}
+# Step 1: Extract relevant columns and add 'year' from 'order_date'
+sales_data <- sales_data %>%
+  select(customer_id, order_date) %>%
+  mutate(order_date = ymd(order_date))
+
+# Step 2: Determine the latest date in the order_date column
+latest_order_date <- max(sales_data$order_date)
+
+# Step 3: Identify the last purchase date for each customer
+last_purchase <- sales_data %>%
+  group_by(customer_id) %>%
+  summarize(last_purchase_date = max(order_date), .groups = 'drop')
+
+# Step 4: Calculate inactivity by comparing last purchase to the latest date in data
+reengagement_list <- last_purchase %>%
+  mutate(months_since_last_purchase = interval(last_purchase_date, latest_order_date) / months(1)) %>%
+  filter(months_since_last_purchase > 12) %>%
+  select(customer_id, last_purchase_date, months_since_last_purchase)
+
+# Step 5: Use gt to make a pretty table
+reengagement_table <- reengagement_list %>%
+  gt() %>%
+  tab_header(
+    title = "Re-Engagement Campaign List",
+    subtitle = "Customers who haven't made a purchase in over 12 months"
+  ) %>%
+  fmt_date(
+    columns = vars(last_purchase_date),
+    date_style = 3  # Format dates to "Mar 15, 2023" style
+  ) %>%
+  fmt_number(
+    columns = vars(months_since_last_purchase),
+    decimals = 1
+  ) %>%
+  cols_label(
+    customer_id = "Customer ID",
+    last_purchase_date = "Last Purchase Date",
+    months_since_last_purchase = "Months Since Last Purchase"
+  ) %>%
+  tab_options(
+    table.font.size = 12,
+    heading.title.font.size = 16,
+    heading.subtitle.font.size = 14
+  )
+ reengagement_table
+```
+ 
+# 3. Create a customer lifetime value (CLV) metric that calculates the total profit from each customer  over time.
+
+```{r}
+ 
+ 
+```
+
+# 4. Determine which customer segments (market segments, regions) have the highest and lowest  retention rates.
+
+```{r}
+ 
+# Calculate cumulative profit for each customer over time
+sales_data <- sales %>%
+  arrange(customer_id, order_date) %>%
+  group_by(customer_id) %>%
+  mutate(cumulative_profit = cumsum(profit)) %>%
+  ungroup()
+
+# Summarize total CLV and identify top 10 customers by total profit
+top_customers <- sales_data %>%
+  group_by(customer_id) %>%
+  summarise(customer_name = first(customer_name),  # Assuming each customer has a consistent name
+            total_profit = sum(profit)) %>%
+  arrange(desc(total_profit)) %>%
+  slice_head(n = 10) %>%  # Select the top 10 customers
+  pull(customer_id)
+
+# Filter data to include only top 10 customers
+top_sales_data <- sales_data %>% filter(customer_id %in% top_customers)
+
+# Plot cumulative profit for the top 10 customers over time
+ggplot(top_sales_data, aes(x = order_date, y = cumulative_profit, color = customer_id)) +
+  geom_line() +
+  labs(title = "Customer Lifetime Value (CLV) Over Time for Top 10 Customers",
+       x = "Order Date",
+       y = "Cumulative Profit") +
+  theme_minimal() +
+  theme(legend.title = element_blank())  # 
+
+ 
+```
+
+```{r}
+# 1. Bar Plot of Total Profit for the Top 10 Customers
+ # Bar Plot of Total Profit for Top 10 Customers
+ggplot(top_sales_data %>% group_by(customer_id, customer_name) %>% summarise(total_profit = sum(profit)),
+       aes(x = reorder(customer_name, -total_profit), y = total_profit, fill = customer_id)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Total Customer Lifetime Value (CLV) for Top 10 Customers",
+       x = "Customer Name",
+       y = "Total Profit") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+```
+ 
+```{r}
+# 2. Box Plot of Order Profit Distribution for Top 10 Customers
+
+# Box Plot of Profit Distribution per Order for Top 10 Customers
+# Calculate total profit per customer and add it to the dataset for sorting purposes in the plot
+top_sales_data <- top_sales_data %>%
+  group_by(customer_id) %>%
+  mutate(total_profit = sum(profit)) %>%
+  ungroup()
+
+# Create the box plot with the corrected data
+ggplot(top_sales_data, aes(x = reorder(customer_name, -total_profit), y = profit, fill = customer_id)) +
+  geom_boxplot() +
+  labs(title = "Profit per Order Distribution for Top 10 Customers",
+       x = "Customer Name",
+       y = "Profit per Order") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+```
+
+```{r}
+# 3. Scatter Plot of Cumulative Profit by Order Date for Top 10 Customers
+
+# Scatter Plot of Cumulative Profit by Order Date for Top 10 Customers
+ggplot(top_sales_data, aes(x = order_date, y = cumulative_profit, color = customer_id)) +
+  geom_point() +
+  labs(title = "Cumulative Profit Over Time for Top 10 Customers",
+       x = "Order Date",
+       y = "Cumulative Profit") +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+
+
+``` 
+# 5. Track customer purchasing patterns and identify potential churn risks based on inactivity or  reduced purchasing frequency
+ 
+
+```{r}
+# Assuming `sales_data` is your dataset with columns 'customer_id', 'order_date', and 'total_sales'
+
+# Step 1: Calculate time intervals and recency
+sales_data <- sales %>%
+  arrange(customer_id, order_date) %>%
+  group_by(customer_id) %>%
+  mutate(
+    days_since_last_purchase = as.numeric(difftime(order_date, lag(order_date), units = "days")),
+    recency = as.numeric(difftime(max(order_date), order_date, units = "days"))
+  ) %>%
+  ungroup()
+
+# Step 2: Summarize churn risk metrics
+churn_risk <- sales_data %>%
+  group_by(customer_id) %>%
+  summarise(
+    customer_name = first(customer_name),
+    total_purchases = n(),
+    avg_days_between_purchases = mean(days_since_last_purchase, na.rm = TRUE),
+    max_days_between_purchases = max(days_since_last_purchase, na.rm = TRUE),
+    latest_recency = min(recency)
+  ) %>%
+  ungroup()
+
+# Step 3: Rank and select top 10 customers at risk
+top_churn_risk <- churn_risk %>%
+  arrange(desc(latest_recency), desc(max_days_between_purchases)) %>%
+  slice_head(n = 10)
+
+# Step 4: Format the data with gt
+top_churn_risk %>%
+  gt() %>%
+  tab_header(
+    title = "Top 10 Customers at Risk of Churning"
+  ) %>%
+  cols_label(
+    customer_id = "Customer ID",
+    customer_name = "Customer Name",
+    total_purchases = "Total Purchases",
+    avg_days_between_purchases = "Avg Days Between Purchases",
+    max_days_between_purchases = "Max Days Between Purchases",
+    latest_recency = "Days Since Last Purchase"
+  ) %>%
+  fmt_number(
+    columns = vars(avg_days_between_purchases, max_days_between_purchases, latest_recency),
+    decimals = 1
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(everything())
+  ) %>%
+  tab_options(
+    table.font.size = "small",
+    column_labels.font.size = "medium"
+  )
+
+
+```
