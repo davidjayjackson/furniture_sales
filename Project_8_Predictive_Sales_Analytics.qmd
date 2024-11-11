@@ -1,0 +1,133 @@
+---
+title: "Project 8: Predictive Sales Analytics"
+subtitle: "Objective: Use historical sales data to forecast future sales and trends"
+format: pptx
+editor: visual
+---
+
+```{r setup}
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(scales) # format x an y labels in ggploty
+library(gt) # table formatter
+library(duckdb)
+library(DBI)
+knitr::opts_chunk$set(echo = TRUE,message = FALSE, warning = FALSE)
+```
+
+```{r}
+rm(list=ls())
+```
+```{r}
+# Check if 'con' exists and is valid
+if (exists("con") && dbIsValid(con)) {
+  # Connection exists and is valid; go straight to querying
+  
+  sales <- dbGetQuery(con, "SELECT * FROM sales;")
+  dbDisconnect(con)
+} else {
+  # Connection does not exist or is invalid; establish connection first
+  con <- dbConnect(duckdb(), "./furniture_mart.duckdb")
+  sales <- dbGetQuery(con, "SELECT * FROM sales;")
+  dbDisconnect(con)
+}
+```
+
+# 1. Identify seasonal trends by analyzing sales data from previous years and group them by month.
+
+```{r}
+monthly_sales$year <- as.factor(monthly_sales$year)
+ggplot(monthly_sales) + geom_line(aes(x=month,y=total_sales,col=year))
+```
+
+
+```{r}
+
+# Ensure date column is in Date format
+data <- sales %>% 
+  mutate(order_date = as.Date(order_date))
+
+# Extract year and month for seasonal analysis
+data <- data %>%
+  mutate(year = year(order_date),
+         month = month(order_date, label = TRUE))
+
+# Summarize monthly sales totals by year
+monthly_sales <- data %>%
+  group_by(year, month) %>%
+  summarize(total_sales = sum(total_sales, na.rm = TRUE))
+```
+```{r}
+# Plot with factor grouping for year without gradient scale
+ggplot(monthly_sales, aes(x = month, y = total_sales, group = factor(year), color = factor(year))) +
+  geom_line() +
+  labs(title = "Monthly Sales Trend Over Time by Year",
+       x = "Month", y = "Total Sales", color = "Year") +
+  theme_minimal()
+
+```
+```{r}
+# Revised faceted plot by year with ordered month and factor for year
+ggplot(monthly_sales, aes(x = month, y = total_sales)) +
+  geom_line(aes(color = factor(year), group = year)) +
+  facet_wrap(~ factor(year), ncol = 1) +
+  labs(title = "Monthly Sales Trends by Year",
+       x = "Month", y = "Total Sales", color = "Year") +
+  theme_minimal()
+```
+```{r}
+
+# Plot 3: Seasonal Sales by Month (Box Plot)
+ggplot(monthly_sales, aes(x = month, y = total_sales)) +
+  geom_boxplot() +
+  labs(title = "Seasonal Sales by Month",
+       x = "Month", y = "Total Sales") +
+  theme_minimal()
+```
+
+# 2. Generate a rolling 12-month sales forecast based on historical sales.
+
+
+```{r}
+library(zoo)
+
+# Summarize and prepare monthly sales data, ensuring all months are present
+monthly_sales_ts <- monthly_sales %>%
+  group_by(year, month) %>%
+  summarize(total_sales = sum(total_sales, na.rm = TRUE)) %>%
+  ungroup() %>%
+  # Combine year and month into a Date column (1st of each month)
+  mutate(date = as.Date(paste(year, month, "01", sep = "-"), format = "%Y-%b-%d")) %>%
+  # Ensure complete date sequence, filling missing months with NA
+  complete(date = seq.Date(min(date), max(date), by = "month")) %>%
+  replace_na(list(total_sales = 0)) %>%  # Fill missing sales with 0 if appropriate
+  select(date, total_sales)
+
+# Create a time series object from the cleaned data
+sales_ts <- ts(monthly_sales_ts$total_sales, start = c(year(min(monthly_sales_ts$date)), month(min(monthly_sales_ts$date))), frequency = 12)
+
+# Fit an ARIMA model to the time series
+arima_model <- auto.arima(sales_ts)
+
+# Forecast the next 12 months
+forecast_sales <- forecast(arima_model, h = 12)
+
+# Plot historical sales and forecasted sales
+autoplot(forecast_sales) +
+  labs(title = "12-Month Rolling Sales Forecast",
+       x = "Date", y = "Total Sales") +
+  theme_minimal()
+
+
+
+```
+
+# 3. Predict which product categories are likely to see increased sales in the upcoming months based  on past trends.
+
+
+# 4. Create a forecasting report that breaks down future sales expectations by region and market  segment.
+
+
+
+# 5. Suggest potential growth strategies for underperforming categories based on past data analysis.
