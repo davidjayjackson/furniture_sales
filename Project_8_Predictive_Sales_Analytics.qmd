@@ -37,12 +37,6 @@ if (exists("con") && dbIsValid(con)) {
 # 1. Identify seasonal trends by analyzing sales data from previous years and group them by month.
 
 ```{r}
-monthly_sales$year <- as.factor(monthly_sales$year)
-ggplot(monthly_sales) + geom_line(aes(x=month,y=total_sales,col=year))
-```
-
-
-```{r}
 
 # Ensure date column is in Date format
 data <- sales %>% 
@@ -76,15 +70,7 @@ ggplot(monthly_sales, aes(x = month, y = total_sales)) +
        x = "Month", y = "Total Sales", color = "Year") +
   theme_minimal()
 ```
-```{r}
 
-# Plot 3: Seasonal Sales by Month (Box Plot)
-ggplot(monthly_sales, aes(x = month, y = total_sales)) +
-  geom_boxplot() +
-  labs(title = "Seasonal Sales by Month",
-       x = "Month", y = "Total Sales") +
-  theme_minimal()
-```
 
 # 2. Generate a rolling 12-month sales forecast based on historical sales.
 
@@ -123,11 +109,102 @@ autoplot(forecast_sales) +
 
 ```
 
-# 3. Predict which product categories are likely to see increased sales in the upcoming months based  on past trends.
+# 3. Predict which product sub-categories are likely to see increased sales in the upcoming months
 
+```{r}
+
+# Convert dates to Date format if not already
+online_sales <- sales %>%
+  mutate(order_date = as.Date(order_date))
+
+# Summarize monthly sales by sub_category
+monthly_sales <- online_sales %>%
+  group_by(sub_category, month = floor_date(order_date, "month")) %>%
+  summarise(total_sales = sum(total_sales, na.rm = TRUE)) %>%
+  ungroup()
+
+# Plot monthly sales trends with trendlines for each sub_category
+ggplot(monthly_sales, aes(x = month, y = total_sales, color = sub_category)) +
+  geom_line(size = 1) +
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed") +  # Add trendline
+  labs(title = "Monthly Sales Trends by Sub-Category with Trendlines",
+       x = "Month",
+       y = "Total Sales") +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  facet_wrap(~sub_category, scales = "free_y") # Separate each sub-category in a facet
+
+# Forecast future sales for each sub_category
+sub_category_forecasts <- monthly_sales %>%
+  split(.$sub_category) %>%
+  map(~ {
+    ts_data <- ts(.x$total_sales, frequency = 12, start = c(year(min(.x$month)), month(min(.x$month))))
+    fit <- auto.arima(ts_data)  # Fit an ARIMA model
+    forecasted <- forecast(fit, h = 6)  # Forecast for the next 6 months
+    autoplot(forecasted) + 
+      ggtitle(paste("Forecast for", unique(.x$sub_category))) + 
+      geom_smooth(method = "lm", se = FALSE, linetype = "dashed")  # Add trendline to forecast plot
+  })
+
+# Display forecasts
+sub_category_forecasts
+
+
+
+
+
+
+```
 
 # 4. Create a forecasting report that breaks down future sales expectations by region and market  segment.
 
+```{r}
+# Load necessary libraries
 
+# Convert dates to Date format if not already
+online_sales <- sales %>%
+  mutate(order_date = as.Date(order_date))
+
+# Summarize monthly sales by region and market segment
+monthly_sales_region_segment <- online_sales %>%
+  group_by(region, market_segment, month = floor_date(order_date, "month")) %>%
+  summarise(total_sales = sum(total_sales, na.rm = TRUE)) %>%
+  ungroup()
+
+# Initialize list to store forecast plots for each region and market segment
+region_segment_forecasts <- monthly_sales_region_segment %>%
+  split(., list(.$region, .$market_segment), drop = TRUE) %>%
+  map(~ {
+    ts_data <- ts(.x$total_sales, frequency = 12, start = c(year(min(.x$month)), month(min(.x$month))))
+    fit <- auto.arima(ts_data)  # Fit an ARIMA model
+    forecasted <- forecast(fit, h = 6)  # Forecast for the next 6 months
+    
+    # Create a dataframe of actual and forecasted values for plotting with trendline
+    actual_data <- data.frame(month = .x$month, total_sales = .x$total_sales)
+    forecast_data <- data.frame(month = seq(max(.x$month) + months(1), length.out = 6, by = "month"),
+                                total_sales = as.numeric(forecasted$mean))
+    
+    combined_data <- bind_rows(actual_data, forecast_data)
+    
+    # Plot historical data with forecast and trendline
+    ggplot(combined_data, aes(x = month, y = total_sales)) +
+      geom_line(color = "blue", size = 1) +  # Historical data and forecast line
+      geom_smooth(method = "lm", se = FALSE, linetype = "dashed", color = "red") +  # Trendline
+      labs(title = paste("Forecast for Region:", unique(.x$region), 
+                         "| Market Segment:", unique(.x$market_segment)),
+           x = "Month",
+           y = "Total Sales") +
+      theme_minimal()
+  })
+
+# Display forecasts with trendlines
+region_segment_forecasts
+
+
+
+```
 
 # 5. Suggest potential growth strategies for underperforming categories based on past data analysis.
+
+
+By implementing these data-driven strategies, you can target the unique challenges and opportunities within each underperforming category, encouraging growth and expanding your market reach. Let me know if you’d like further tailored strategies based on specific sub_category performance!
