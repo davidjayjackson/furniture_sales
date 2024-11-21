@@ -1,0 +1,314 @@
+---
+title: "Project 8: Predictive Sales Analytics"
+subtitle: "Objective: Use historical sales data to forecast future sales and trends"
+format: dashboard
+editor: visual
+---
+
+```{r setup}
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(scales) # format x an y labels in ggploty
+library(gt) # table formatter
+library(duckdb)
+library(DBI)
+knitr::opts_chunk$set(echo = TRUE,message = FALSE, warning = FALSE)
+```
+
+```{r, echo=FALSE}
+rm(list=ls())
+```
+
+```{r,  echo=FALSE}
+# Check if 'con' exists and is valid
+if (exists("con") && dbIsValid(con)) {
+  # Connection exists and is valid; go straight to querying
+  
+  sales <- dbGetQuery(con, "SELECT * FROM sales;")
+  dbDisconnect(con)
+} else {
+  # Connection does not exist or is invalid; establish connection first
+  con <- dbConnect(duckdb(), "./furniture_mart.duckdb")
+  sales <- dbGetQuery(con, "SELECT * FROM sales;")
+  dbDisconnect(con)
+}
+```
+
+# Table of Contents
+
+ 1. Calculate the total profit and profit margin for each region.
+ 2. Rank regions by profitability and total sales volume.
+ 3. Identify regions with declining sales and provide insights on potential causes.
+ 4. Analyze which product categories and sub-categories are most profitable in each region.
+ 5. Create a report that recommends regions for increased marketing investment based on  profitability and sales growth potential.
+
+# Page 1
+#### 1. Calculate the total profit and profit margin for each region.
+
+```{r}
+
+# Ensure relevant columns are numeric
+sales <- sales %>%
+  mutate(
+    profit = as.numeric(profit),
+    total_sales = as.numeric(total_sales)
+  )
+
+# Calculate total profit and profit margin by region
+region_summary <- sales %>%
+  group_by(region) %>%
+  summarise(
+    total_profit = sum(profit, na.rm = TRUE),
+    total_sales = sum(total_sales, na.rm = TRUE)
+  ) %>%
+  mutate(
+    profit_margin = total_profit / total_sales
+  )
+
+# Plot: Total Profit by Region
+ggplot(region_summary, aes(x = region, y = total_profit)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Total Profit by Region",
+    x = "Region",
+    y = "Total Profit"
+  ) +
+  theme_minimal()
+
+# Plot: Profit Margin by Region
+ggplot(region_summary, aes(x = region, y = profit_margin)) +
+  geom_col(fill = "darkorange") +
+  labs(
+    title = "Profit Margin by Region",
+    x = "Region",
+    y = "Profit Margin"
+  ) +
+  theme_minimal()
+
+
+
+```
+# Page 2  
+ 2. Rank regions by profitability and total sales volume.
+```{r}
+
+# Ensure relevant columns are numeric
+sales <- sales %>%
+  mutate(
+    profit = as.numeric(profit),
+    total_sales = as.numeric(total_sales)
+  )
+
+# Calculate total profit, total sales, and rank regions
+region_ranking <- sales %>%
+  group_by(region) %>%
+  summarise(
+    total_profit = sum(profit, na.rm = TRUE),
+    total_sales = sum(total_sales, na.rm = TRUE)
+  ) %>%
+  arrange(desc(total_profit)) %>%
+  mutate(
+    profit_rank = rank(-total_profit),
+    sales_rank = rank(-total_sales)
+  )
+
+# Display the rankings
+print(region_ranking)
+
+# Plot: Rank Regions by Profitability and Sales Volume
+ggplot(region_ranking, aes(x = reorder(region, -total_profit), y = total_profit)) +
+  geom_col(fill = "steelblue") +
+  geom_text(aes(label = profit_rank), vjust = -0.5, color = "black") +
+  labs(
+    title = "Regions Ranked by Profitability",
+    x = "Region",
+    y = "Total Profit"
+  ) +
+  theme_minimal()
+
+# Plot: Total Sales Volume by Region
+ggplot(region_ranking, aes(x = reorder(region, -total_sales), y = total_sales)) +
+  geom_col(fill = "darkorange") +
+  geom_text(aes(label = sales_rank), vjust = -0.5, color = "black") +
+  labs(
+    title = "Regions Ranked by Total Sales Volume",
+    x = "Region",
+    y = "Total Sales"
+  ) +
+  theme_minimal()
+
+
+
+```
+ 
+ 
+# Page 3
+ 3. Identify regions with declining sales and provide insights on potential causes.
+ 
+```{r}
+
+# Ensure relevant columns are numeric and parse dates
+sales <- sales %>%
+  mutate(
+    total_sales = as.numeric(total_sales),
+    order_date = as.Date(order_date)
+  ) %>%
+  mutate(year = year(order_date))
+
+# Aggregate total sales by region and year
+sales_trend <- sales %>%
+  group_by(region, year) %>%
+  summarise(
+    total_sales = sum(total_sales, na.rm = TRUE)
+  ) %>%
+  arrange(region, year)
+
+# Identify declining sales trends
+sales_trend <- sales_trend %>%
+  group_by(region) %>%
+  mutate(sales_change = total_sales - lag(total_sales)) %>%
+  ungroup()
+
+# Filter regions with declining sales
+declining_regions <- sales_trend %>%
+  filter(sales_change < 0)
+
+# Plot: Sales Trends by Region
+ggplot(sales_trend, aes(x = year, y = total_sales, color = region, group = region)) +
+  geom_line(size = 1) +
+  geom_point() +
+  labs(
+    title = "Sales Trends by Region",
+    x = "Year",
+    y = "Total Sales",
+    color = "Region"
+  ) +
+  theme_minimal()
+
+# Display regions with declining sales
+print(declining_regions)
+
+
+
+```
+
+#Page 3B
+
+**Key Features of the Analysis:**
+(1) Sales Trends: Aggregates sales by region and year to detect trends over time.
+(2) Declining Sales: Identifies periods where sales decreased compared to the previous year.
+(3) Visualization: A line chart shows sales trends for all regions over the years.
+
+#Page 3C
+
+**Potential Causes:**
+(1) Discounts: Check if regions with declining sales offered higher discounts.
+(2) Profitability: Correlate declining sales with low or negative profit margins.
+(3) Market Segments: Analyze the customer segments contributing to sales in those regions.
+
+
+
+#Page 4
+ 4. Analyze which product  and sub-categories are most profitable in each region.
+ 
+```{r}
+
+# Data preparation
+profit_summary <- sales %>%
+  group_by(region, sub_category) %>%
+  summarise(total_profit = sum(as.numeric(profit), na.rm = TRUE)) %>%
+  arrange(region, desc(total_profit))
+
+# Bar chart: Total profit by sub-category for each region
+ggplot(profit_summary, aes(x = reorder(sub_category, total_profit), y = total_profit, fill = region)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip() +
+  labs(title = "Total Profit by Sub-Category in Each Region",
+       x = "Sub-Category",
+       y = "Total Profit") +
+  theme_minimal()
+
+# Scatter plot: Profit vs Sales by product, colored by sub-category for each region
+sales <- sales %>% mutate(profit = as.numeric(profit), total_sales = as.numeric(total_sales))
+
+ggplot(sales, aes(x = total_sales, y = profit, color = sub_category)) +
+  geom_point(alpha = 0.7) +
+  facet_wrap(~region) +
+  labs(title = "Profit vs Sales by Product in Each Region",
+       x = "Total Sales",
+       y = "Profit") +
+  theme_minimal()
+
+
+```
+```{r}
+# Heatmap: Profit contribution by sub-category and region
+heatmap_data <- profit_summary %>%
+  pivot_wider(names_from = region, values_from = total_profit, values_fill = 0)
+
+# Convert to long format for ggplot
+heatmap_data_long <- heatmap_data %>%
+  pivot_longer(cols = -sub_category, names_to = "region", values_to = "total_profit")
+
+# Create the heatmap
+ggplot(heatmap_data_long, aes(x = region, y = sub_category, fill = total_profit)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "blue") +
+  labs(title = "Profit Contribution by Sub-Category and Region",
+       x = "Region",
+       y = "Sub-Category",
+       fill = "Total Profit") +
+  theme_minimal()
+```
+
+#Page 5
+
+ 5. Create a report that recommends regions for increased marketing investment based on  profitability and sales growth potential.
+
+```{r}
+
+# Ensure the dataset is loaded as 'sales' data.frame
+sales <- sales %>%
+  mutate(order_date = as.Date(order_date), profit = as.numeric(profit), total_sales = as.numeric(total_sales))
+
+# Profitability Analysis by Region
+profit_by_region <- sales %>%
+  group_by(region) %>%
+  summarise(total_profit = sum(profit, na.rm = TRUE),
+            avg_profit_per_order = mean(profit, na.rm = TRUE)) %>%
+  arrange(desc(total_profit))
+
+# Sales Growth Analysis by Region (Yearly Growth)
+sales_growth_by_region <- sales %>%
+  mutate(year = year(order_date)) %>%
+  group_by(region, year) %>%
+  summarise(total_sales = sum(total_sales, na.rm = TRUE)) %>%
+  arrange(region, year) %>%
+  group_by(region) %>%
+  mutate(yearly_growth = (total_sales / lag(total_sales) - 1) * 100) %>%
+  ungroup()
+
+# Combine Profitability and Sales Growth
+combined_analysis <- profit_by_region %>%
+  left_join(sales_growth_by_region %>% group_by(region) %>% summarise(avg_growth = mean(yearly_growth, na.rm = TRUE)),
+            by = "region") %>%
+  arrange(desc(total_profit))
+
+# Create Recommendations
+recommendations <- combined_analysis %>%
+  mutate(recommendation = case_when(
+    total_profit > median(total_profit, na.rm = TRUE) & avg_growth > 0 ~ "High Priority",
+    total_profit > median(total_profit, na.rm = TRUE) & avg_growth <= 0 ~ "Moderate Priority",
+    TRUE ~ "Low Priority"
+  ))
+
+
+
+```
+```{r}
+# Display the recommendations table
+recommendations %>%
+  select(region, total_profit, avg_profit_per_order, avg_growth, recommendation) %>%
+  knitr::kable(caption = "Regional Marketing Investment Recommendations")
+```
