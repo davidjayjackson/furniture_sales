@@ -1,0 +1,416 @@
+---
+title: "Project 10: Advanced Sales Growth Analytics"
+subtitle: "Objective: Dive deeper into sales growth metrics and analyze factors influencing growth."
+format: pptx
+editor: visual
+---
+
+```{r setup}
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(scales) # format x an y labels in ggploty
+library(gt) # table formatter
+library(duckdb)
+library(DBI)
+knitr::opts_chunk$set(echo = TRUE,message = FALSE, warning = FALSE)
+```
+
+```{r, echo=FALSE}
+rm(list=ls())
+```
+
+```{r,  echo=FALSE}
+# Check if 'con' exists and is valid
+if (exists("con") && dbIsValid(con)) {
+  # Connection exists and is valid; go straight to querying
+  
+  sales <- dbGetQuery(con, "SELECT * FROM sales;")
+  dbDisconnect(con)
+} else {
+  # Connection does not exist or is invalid; establish connection first
+  con <- dbConnect(duckdb(), "./furniture_mart.duckdb")
+  sales <- dbGetQuery(con, "SELECT * FROM sales;")
+  dbDisconnect(con)
+}
+```
+
+# Table of Contents
+
+ 1. Calculate the year-over-year (YoY) and quarter-over-quarter (QoQ) sales growth for the entire  business.
+ 2. Identify key drivers of sales growth, such as market segment or region performance.
+ 3. Analyze which customer segments are contributing the most to sales growth.
+ 4. Create a heatmap to visualize growth by product category and sub-category.
+ 5. Develop a predictive model for future growth based on past performance metrics and market
+ conditions
+
+#Requirement 1:
+ 1. Calculate the year-over-year (YoY) and quarter-over-quarter (QoQ) sales growth for the entire  business.
+ 
+```{r}
+# Convert 'order_date' to a date format
+sales <- sales %>%
+  mutate(order_date = as.Date(order_date),
+         year = year(order_date),
+         quarter = paste0("Q", quarter(order_date)))
+
+# Summarize total sales by year and quarter
+sales_summary <- sales %>%
+  group_by(year, quarter) %>%
+  summarize(total_sales = sum(as.numeric(total_sales), na.rm = TRUE)) %>%
+  arrange(year, quarter)
+
+# Add a unique "quarter_id" for lagging purposes
+sales_summary <- sales_summary %>%
+  mutate(quarter_id = row_number())
+
+# Calculate YoY and QoQ growth
+sales_summary <- sales_summary %>%
+  mutate(
+    YoY_growth = ifelse(quarter_id > 4, 
+                        (total_sales - lag(total_sales, 4)) / lag(total_sales, 4) * 100, 
+                        NA),
+    QoQ_growth = (total_sales - lag(total_sales)) / lag(total_sales) * 100
+  )
+
+# Replace NaN and Inf values with NA for cleaner plots
+sales_summary <- sales_summary %>%
+  mutate(
+    YoY_growth = ifelse(is.nan(YoY_growth) | is.infinite(YoY_growth), NA, YoY_growth),
+    QoQ_growth = ifelse(is.nan(QoQ_growth) | is.infinite(QoQ_growth), NA, QoQ_growth)
+  )
+
+# Plot 1: Total Sales Over Time (Quarterly)
+ggplot(sales_summary, aes(x = interaction(year, quarter, sep = "-"), y = total_sales)) +
+  geom_line(group = 1, color = "blue") +
+  geom_point() +
+  labs(title = "Total Sales Over Time (Quarterly)", x = "Quarter", y = "Total Sales") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+#Requirement 2:
+ 2. Identify key drivers of sales growth, such as market segment or region performance.
+ 
+```{r}
+# Summarize sales by market segment and region
+sales_drivers <- sales %>%
+  group_by(year, quarter, market_segment, region) %>%
+  summarize(total_sales = sum(as.numeric(total_sales), na.rm = TRUE)) %>%
+  arrange(year, quarter)
+
+# Add a unique "quarter_id" for lagging purposes
+sales_drivers <- sales_drivers %>%
+  mutate(quarter_id = row_number())
+
+# Calculate YoY and QoQ growth for each market segment and region
+sales_drivers <- sales_drivers %>%
+  group_by(market_segment, region) %>%
+  mutate(
+    YoY_growth = ifelse(quarter_id > 4, 
+                        (total_sales - lag(total_sales, 4)) / lag(total_sales, 4) * 100, 
+                        NA),
+    QoQ_growth = (total_sales - lag(total_sales)) / lag(total_sales) * 100
+  )
+
+# Replace NaN and Inf values with NA for cleaner plots
+sales_drivers <- sales_drivers %>%
+  mutate(
+    YoY_growth = ifelse(is.nan(YoY_growth) | is.infinite(YoY_growth), NA, YoY_growth),
+    QoQ_growth = ifelse(is.nan(QoQ_growth) | is.infinite(QoQ_growth), NA, QoQ_growth)
+  )
+
+# Plot 1: Total Sales by Market Segment and Region
+ggplot(sales_drivers, aes(x = region, y = total_sales, fill = market_segment)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Total Sales by Market Segment and Region", x = "Region", y = "Total Sales") +
+  scale_fill_brewer(palette = "Set3") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+```
+
+```{r}
+# Summarize total sales by year and market segment
+annual_sales <- sales %>%
+  group_by(year, market_segment) %>%
+  summarize(total_sales = sum(as.numeric(total_sales), na.rm = TRUE)) %>%
+  arrange(year, market_segment)
+
+# Calculate YoY growth for annual sales
+annual_sales <- annual_sales %>%
+  group_by(market_segment) %>%
+  mutate(YoY_growth = (total_sales - lag(total_sales)) / lag(total_sales) * 100)
+
+# Plot: Year-over-Year Growth by Market Segment (Annual)
+ggplot(annual_sales %>% filter(!is.na(YoY_growth)), 
+       aes(x = year, y = YoY_growth, color = market_segment, group = market_segment)) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = "Year-over-Year Growth by Market Segment (Annual)", 
+    x = "Year", 
+    y = "YoY Growth (%)"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%")) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.title = element_blank()
+  )
+
+```
+
+```{r}
+# Plot: Quarter-over-Quarter Growth by Market Segment
+ggplot(sales_drivers %>% filter(!is.na(QoQ_growth)), 
+       aes(x = interaction(year, quarter, sep = "-"), y = QoQ_growth, 
+           color = market_segment, group = market_segment)) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = "Quarter-over-Quarter Growth by Market Segment", 
+    x = "Quarter", 
+    y = "QoQ Growth (%)"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%")) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.title = element_blank()
+  )
+
+```
+
+#Requirement 3
+
+ 3. Analyze which customer segments are contributing the most to sales growth.
+```{r}
+# Summarize total sales by year, quarter, and market segment
+segment_sales <- sales %>%
+  group_by(year, quarter, market_segment) %>%
+  summarize(total_sales = sum(as.numeric(total_sales), na.rm = TRUE)) %>%
+  arrange(year, quarter, market_segment)
+
+# Add a unique "quarter_id" for lagging purposes
+segment_sales <- segment_sales %>%
+  mutate(quarter_id = row_number())
+
+# Calculate YoY and QoQ growth for each customer segment
+segment_sales <- segment_sales %>%
+  group_by(market_segment) %>%
+  mutate(
+    YoY_growth = ifelse(quarter_id > 4, 
+                        (total_sales - lag(total_sales, 4)) / lag(total_sales, 4) * 100, 
+                        NA),
+    QoQ_growth = (total_sales - lag(total_sales)) / lag(total_sales) * 100
+  )
+
+# Replace NaN and Inf values with NA for cleaner plots
+segment_sales <- segment_sales %>%
+  mutate(
+    YoY_growth = ifelse(is.nan(YoY_growth) | is.infinite(YoY_growth), NA, YoY_growth),
+    QoQ_growth = ifelse(is.nan(QoQ_growth) | is.infinite(QoQ_growth), NA, QoQ_growth)
+  )
+
+# Plot 1: Contribution to Total Sales by Customer Segment
+ggplot(segment_sales, aes(x = market_segment, y = total_sales, fill = market_segment)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Contribution to Total Sales by Customer Segment", x = "Customer Segment", y = "Total Sales") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_fill_brewer(palette = "Set3")
+
+# Plot 2: Year-over-Year Growth by Customer Segment
+ggplot(segment_sales %>% filter(!is.na(YoY_growth)), 
+       aes(x = interaction(year, quarter, sep = "-"), y = YoY_growth, 
+           color = market_segment, group = market_segment)) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = "Year-over-Year Growth by Customer Segment", 
+    x = "Quarter", 
+    y = "YoY Growth (%)"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title = element_blank())
+
+# Plot 3: Quarter-over-Quarter Growth by Customer Segment
+ggplot(segment_sales %>% filter(!is.na(QoQ_growth)), 
+       aes(x = interaction(year, quarter, sep = "-"), y = QoQ_growth, 
+           color = market_segment, group = market_segment)) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = "Quarter-over-Quarter Growth by Customer Segment", 
+    x = "Quarter", 
+    y = "QoQ Growth (%)"
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.title = element_blank())
+
+
+
+```
+
+#Requirement 4:
+ 4. Create a heatmap to visualize growth by product category and sub-category.
+```{r}
+
+# Convert order_date to Date type
+sales <- sales %>%
+  mutate(order_date = as.Date(order_date))
+
+# Aggregate total sales by year, category, and sub-category
+sales_summary <- sales %>%
+  mutate(year = lubridate::year(order_date)) %>%
+  group_by(category, sub_category, year) %>%
+  summarize(total_sales = sum(as.numeric(total_sales), na.rm = TRUE), .groups = "drop")
+
+# Calculate year-over-year growth
+growth_data <- sales_summary %>%
+  arrange(category, sub_category, year) %>%
+  group_by(category, sub_category) %>%
+  mutate(growth = (total_sales - lag(total_sales)) / lag(total_sales) * 100) %>%
+  ungroup()
+
+# Filter for rows with non-NA growth values
+growth_data <- growth_data %>% filter(!is.na(growth))
+
+# Create the heatmap
+ggplot(growth_data, aes(x = factor(year), y = sub_category, fill = growth)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0) +
+  labs(
+    title = "Year-over-Year Growth by Product Sub-Category",
+    x = "Year",
+    y = "Sub-Category",
+    fill = "Growth (%)"
+  ) +
+  facet_wrap(~ category, scales = "free_y") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+
+```
+ 
+ 
+#Requirement 5:
+
+ 5. Develop a predictive model for future growth based on past performance metrics and market  conditions
+
+```{r}
+
+
+# Aggregate total sales by year, category, and sub-category
+sales_summary <- sales %>%
+  mutate(year = lubridate::year(order_date)) %>%
+  group_by(category, sub_category, year) %>%
+  summarize(total_sales = sum(as.numeric(total_sales), na.rm = TRUE), .groups = "drop")
+
+# Calculate year-over-year growth
+growth_data <- sales_summary %>%
+  arrange(category, sub_category, year) %>%
+  group_by(category, sub_category) %>%
+  mutate(growth = (total_sales - lag(total_sales)) / lag(total_sales) * 100) %>%
+  ungroup() %>%
+  filter(!is.na(growth))
+
+# Filter for a single sub_category for demonstration (modify as needed)
+sample_data <- growth_data %>% filter(category == "Furniture", sub_category == "Chairs")
+
+# Create a time series object for the growth data
+growth_ts <- ts(sample_data$growth, start = min(sample_data$year), frequency = 1)
+
+# Fit an ARIMA model
+arima_model <- auto.arima(growth_ts)
+
+# Forecast future growth for the next 5 years
+growth_forecast <- forecast(arima_model, h = 5)
+
+# Plot the forecast
+autoplot(growth_forecast) +
+  labs(
+    title = "Forecasted Growth for Chairs",
+    x = "Year",
+    y = "Growth (%)"
+  ) +
+  theme_minimal()
+
+# Print forecasted values
+print(growth_forecast)
+
+
+
+```
+```{r}
+# Load necessary libraries
+library(tidyverse)
+library(readxl)
+library(forecast)
+
+# Convert order_date to Date type
+sales <- sales %>%
+  mutate(order_date = as.Date(order_date))
+
+# Aggregate total sales by year and sub-category
+sales_summary <- sales %>%
+  mutate(year = lubridate::year(order_date)) %>%
+  group_by(sub_category, year) %>%
+  summarize(total_sales = sum(as.numeric(total_sales), na.rm = TRUE), .groups = "drop")
+
+# Calculate year-over-year growth
+growth_data <- sales_summary %>%
+  arrange(sub_category, year) %>%
+  group_by(sub_category) %>%
+  mutate(
+    growth = (total_sales - lag(total_sales)) / lag(total_sales) * 100
+  ) %>%
+  ungroup()
+
+# Combine data across sub-categories
+combined_data <- growth_data %>%
+  group_by(year) %>%
+  summarize(avg_growth = mean(growth, na.rm = TRUE)) %>%
+  ungroup()
+
+# Create a time series object
+growth_ts <- ts(combined_data$avg_growth, start = min(combined_data$year), frequency = 1)
+
+# Fit an ETS model
+ets_model <- ets(growth_ts)
+
+# Print model summary
+print(summary(ets_model))
+
+# Forecast growth for the next 5 periods
+growth_forecast <- forecast(ets_model, h = 2)
+
+# Print forecasted values
+print(growth_forecast)
+
+# Plot the forecast
+autoplot(growth_forecast) +
+  labs(
+    title = "ETS Model Forecast for Growth",
+    x = "Year",
+    y = "Growth (%)"
+  ) +
+  theme_minimal()
+
+# Align fitted values with the combined_data
+fitted_values <- as.numeric(fitted(ets_model))
+combined_data <- combined_data %>%
+  mutate(fitted_growth = fitted_values[1:nrow(combined_data)])
+
+# Plot actual vs fitted values
+ggplot(combined_data, aes(x = year)) +
+  geom_line(aes(y = avg_growth), color = "blue", size = 1) +
+  geom_line(aes(y = fitted_growth), color = "red", linetype = "dashed", size = 1) +
+  labs(
+    title = "Actual vs Fitted Growth",
+    x = "Year",
+    y = "Growth (%)"
+  ) +
+  theme_minimal()
+
+
+```
+
